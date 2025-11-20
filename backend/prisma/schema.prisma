@@ -1,0 +1,153 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Usuario {
+  id            Int      @id @default(autoincrement())
+  nombre        String
+  apellido      String
+  email         String   @unique
+  telefono      String?
+  passwordHash  String
+  rol           String
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  casas         Casa[]
+  contactos     ContactoEmergencia[]
+  notificaciones Notificacion[]
+  sesiones      Sesion[]
+}
+
+
+model Casa {
+  id        Int      @id @default(autoincrement())
+  codigo    String   @unique
+  calle     String?
+  numero    String?
+  manzana   String?
+  barrio    String?
+  activa    Boolean  @default(true)
+  creadoEn  DateTime @default(now())
+
+  usuarioId Int
+  usuario   Usuario @relation(fields: [usuarioId], references: [id])
+
+  dispositivos Dispositivo[]
+  camaras      Camara[]
+}
+
+
+model Dispositivo {
+  id              Int      @id @default(autoincrement())
+  deviceId        String   @unique
+  nombre          String?
+  tipo            String?
+  firmwareVersion String?
+  online          Boolean  @default(false)
+  ultimaConexion  DateTime?
+  creadoEn        DateTime @default(now())
+
+  casaId     Int
+  casa       Casa      @relation(fields: [casaId], references: [id])
+
+  sensores   Sensor[]
+  eventos    Evento[]
+}
+
+
+model Sensor {
+  id          Int     @id @default(autoincrement())
+  tipo        String
+  pin         String?
+  descripcion String?
+  activo      Boolean @default(true)
+
+  dispositivoId Int
+  dispositivo   Dispositivo @relation(fields: [dispositivoId], references: [id])
+
+  eventos      Evento[]
+}
+
+
+model Evento {
+  id            Int      @id @default(autoincrement())
+  tipo          String
+  valor         String?
+  fechaHora     DateTime @default(now())
+  origen        String?
+
+  dispositivoId Int
+  dispositivo   Dispositivo @relation(fields: [dispositivoId], references: [id])
+
+  sensorId      Int?
+  sensor        Sensor?  @relation(fields: [sensorId], references: [id])
+
+  notificaciones Notificacion[]
+}
+
+model ContactoEmergencia {
+  id        Int     @id @default(autoincrement())
+  nombre    String
+  telefono  String
+  relacion  String?
+  activo    Boolean @default(true)
+
+  usuarioId Int
+  usuario   Usuario @relation(fields: [usuarioId], references: [id])
+}
+
+model Notificacion {
+  id         Int      @id @default(autoincrement())
+  tipo       String
+  mensaje    String
+  enviadoEn  DateTime @default(now())
+  canal      String?
+  entregado  Boolean  @default(false)
+
+  usuarioId  Int
+  usuario    Usuario @relation(fields: [usuarioId], references: [id])
+
+  eventoId   Int
+  evento     Evento  @relation(fields: [eventoId], references: [id])
+}
+
+model Sesion {
+  id          Int      @id @default(autoincrement())
+  jwtToken    String
+  ip          String?
+  dispositivo String?
+  inicio      DateTime @default(now())
+  expiracion  DateTime?
+  activa      Boolean  @default(true)
+
+  usuarioId   Int
+  usuario     Usuario @relation(fields: [usuarioId], references: [id])
+}
+
+model Camara {
+  id        Int     @id @default(autoincrement())
+  nombre    String
+  urlRTSP   String?
+  urlWebRTC String?
+  activa    Boolean @default(true)
+  tipo      String?
+
+  casaId Int
+  casa   Casa @relation(fields: [casaId], references: [id])
+}
+
+model LogSistema {
+  id        Int      @id @default(autoincrement())
+  nivel     String
+  mensaje   String
+  origen    String?
+  fechaHora DateTime @default(now())
+}
+
