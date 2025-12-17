@@ -39,3 +39,6 @@ info/
 # IDE
 **/.idea/
 **/*.iml
+
+# Firebase / Google credentials
+backend/firebase/service-account.json
