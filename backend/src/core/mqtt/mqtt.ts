@@ -1,49 +1,368 @@
 import mqtt from "mqtt";
 import { prisma } from "../database/prisma";
-import { logSistema } from "../../modules/logs/log.service";
+import { logger } from "../logger";
+import { sendTestSms } from "../twilio";
+import { resolverDestinatarios } from "../../utils/resolverDestinatarios";
+import { notificarFCM } from "../notificaciones/fcm";
 
-const MQTT_URL = process.env.MQTT_URL || "mqtt://localhost:1883";
+const mqttUrl = process.env.MQTT_URL || "mqtt://192.168.1.50:1883";
 
-console.log("🔌 Conectando al broker MQTT:", MQTT_URL);
-
-export const mqttClient = mqtt.connect(MQTT_URL, {
-  reconnectPeriod: 3000,
-  clientId: "backend-" + Math.random().toString(16).slice(2)
+const client = mqtt.connect(mqttUrl, {
+  clientId: "backend-" + Math.random().toString(16).slice(2),
+  clean: true,
+  username: process.env.MQTT_USERNAME || undefined,
+  password: process.env.MQTT_PASSWORD || undefined,
 });
 
-mqttClient.on("connect", () => {
-  console.log("🟢 Conectado al broker MQTT");
-});
+// =======================================================
+// Helpers
+// =======================================================
 
-mqttClient.subscribe("casa/+/dispositivo/+/event", { qos: 1 });
-mqttClient.subscribe("casa/+/dispositivo/+/heartbeat", { qos: 1 });
+// Asegura que exista un Dispositivo con ese deviceId y lo marca online
+async function upsertDispositivoOnline(deviceId: string) {
+  const ahora = new Date();
 
-mqttClient.on("message", async (topic, payload) => {
-  const data = payload.toString();
-  console.log("📩 MQTT mensaje recibido:", topic, data);
+  const existente = await prisma.dispositivo.findUnique({
+    where: { deviceId },
+  });
 
-  // Detectar heartbeat
-  if (topic.includes("heartbeat")) {
-    const parts = topic.split("/");
-    const casaId = Number(parts[1]);
-    const dispositivoId = Number(parts[3]);
-
-    await prisma.dispositivo.update({
-      where: { id: dispositivoId },
+  if (existente) {
+    return prisma.dispositivo.update({
+      where: { deviceId },
       data: {
-        ultimaConexion: new Date(),
         online: true,
+        ultimaConexion: ahora,
       },
     });
+  }
 
-    logSistema.info(`Heartbeat recibido de dispositivo ${dispositivoId}`, "mqtt");
+  // Creación mínima, sin casa asociada
+  return prisma.dispositivo.create({
+    data: {
+      deviceId,
+      nombre: `Dispositivo ${deviceId}`,
+      online: true,
+      ultimaConexion: ahora,
+    },
+  });
+}
+
+// Parsea JSON sin tirar el proceso
+function safeJsonParse<T = any>(raw: string): T | null {
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    logger.warn(`MQTT payload no es JSON válido: ${raw}`);
+    return null;
+  }
+}
+
+// Saca el deviceId del topic: home/{deviceId}/...
+function deviceIdFromTopic(topic: string): string | null {
+  const parts = topic.split("/");
+  // home/{deviceId}/...
+  if (parts.length >= 2 && parts[0] === "home") {
+    return parts[1] || null;
+  }
+  return null;
+}
+
+async function buildDoorOpenedSms(deviceId: string): Promise<string> {
+  // Buscamos el dispositivo con su casa y el usuario dueño
+  const disp = await prisma.dispositivo.findUnique({
+    where: { deviceId },
+    include: {
+      casa: {
+        include: {
+          usuario: true,
+        },
+      },
+    },
+  });
+
+  // Si no hay dispositivo/casa/usuario, mandamos algo genérico
+  if (!disp || !disp.casa || !disp.casa.usuario) {
+    return `ALERTA: Se abrió la puerta de un dispositivo no asignado (deviceId=${deviceId})`;
+  }
+
+  const casa = disp.casa;
+  const usuario = casa.usuario;
+
+  const nombreCompleto = `${usuario.nombre} ${usuario.apellido}`.trim();
+  const numeroCasa = casa.numero || casa.codigo || "sin número";
+
+  // 👉 SMS “lindo” sin mostrar deviceId
+  return `Cliente: ${nombreCompleto}, la puerta se abrió. Casa=${numeroCasa}`;
+}
+
+
+// =======================================================
+// Conexión y suscripciones
+// =======================================================
+client.on("connect", () => {
+  logger.info("🔌 Conectado a MQTT: " + mqttUrl);
+
+  // Registro inicial de dispositivo
+  client.subscribe("home/register", (err) => {
+    logger.info("sub home/register: " + (err || "OK"));
+  });
+
+  // Eventos de puerta
+  client.subscribe("home/+/door/open", (err) => {
+    logger.info("sub home/+/door/open: " + (err || "OK"));
+  });
+
+  client.subscribe("home/+/door/closed", (err) => {
+    logger.info("sub home/+/door/closed: " + (err || "OK"));
+  });
+
+  // Heartbeat
+  client.subscribe("home/+/heartbeat", (err) => {
+    logger.info("sub home/+/heartbeat: " + (err || "OK"));
+  });
+
+  // ACK de configuración WiFi
+  client.subscribe("home/+/wifi/ack", (err) => {
+    logger.info("sub home/+/wifi/ack: " + (err || "OK"));
+  });
+});
+
+// =======================================================
+// Manejo de mensajes
+// =======================================================
+client.on("message", async (topic, payload) => {
+  const raw = payload.toString();
+  logger.info(`📩 MQTT [${topic}]: ${raw}`);
+
+  try {
+    // Caso especial: home/register (no lleva deviceId en el topic)
+    if (topic === "home/register") {
+      const data = safeJsonParse<{ deviceId?: string }>(raw);
+      const deviceId = data?.deviceId;
+
+      if (!deviceId) {
+        logger.warn("home/register sin deviceId, ignorando.");
+        return;
+      }
+
+      const disp = await upsertDispositivoOnline(deviceId);
+      logger.info(`✅ Dispositivo registrado/actualizado: ${disp.deviceId} (id=${disp.id})`);
+      return;
+    }
+
+    // Resto de topics: home/{deviceId}/...
+    const deviceIdTopic = deviceIdFromTopic(topic);
+    const data = safeJsonParse<any>(raw) || {};
+    const deviceId = data.deviceId || deviceIdTopic;
+
+    if (!deviceId) {
+      logger.warn(`Mensaje MQTT sin deviceId (topic=${topic})`);
+      return;
+    }
+
+    // Normalizamos y dejamos el dispositivo en online
+    const dispositivo = await upsertDispositivoOnline(deviceId);
+
+    // home/{deviceId}/door/open
+    if (topic.startsWith(`home/${deviceId}/door/open`)) {
+      const tipo = data.tipo || "PUERTA_ABIERTA";
+      const valor = data.valor ?? "1";
+
+      // Siempre guardar evento primero
+      await prisma.evento.create({
+        data: {
+          tipo,
+          valor: String(valor),
+          origen: "MQTT",
+          dispositivoId: dispositivo.id,
+        },
+      });
+
+      logger.info(`🚪 [${deviceId}] Evento puerta abierta (valor=${valor})`);
+
+      // ► Obtener datos del cliente / casa / alarma
+      const info = await resolverDestinatarios(deviceId);
+
+      if (!info) {
+        logger.warn("No se encontró casa/usuario para este dispositivo.");
+        return;
+      }
+
+      // ► Si la alarma no está activada, NO mandar SMS
+      if (!info.alarmaArmada) {
+        logger.info("🔕 Alarma desactivada → NO se envía SMS.");
+        return;
+      }
+
+      if (info.fcmToken) {
+        await notificarFCM(
+          info.fcmToken,
+          "🚨 ¡PUERTA ABIERTA!",
+          `Casa ${info.numeroCasa} – ${info.nombreCliente}`
+        );
+      }
+
+      // --- SI LLEGAMOS AQUÍ → Alarma activada → enviar SMS ---
+      /*const smsBody = `Cliente: ${info.nombreCliente} – Casa ${info.numeroCasa} – La puerta se abrió`;
+      try {
+        await sendTestSms(smsBody);
+        logger.info("📨 SMS enviado correctamente (alarma armada)");
+      } catch (err) {
+        logger.error("❌ Error enviando SMS");
+        logger.error(String(err));
+      }*/
+      // =======================================================
+      // ALERTA: ENVIAR SMS REAL AL DUEÑO
+      // =======================================================
+
+      const smsBodyDueno = `Cliente: ${info.nombreCliente} – Casa ${info.numeroCasa} – La puerta se abrió`;
+
+      try {
+        await sendTestSms(smsBodyDueno);
+        logger.info(`📨 SMS REAL enviado al dueño (${info.telefonoCliente})`);
+      } catch (err) {
+        logger.error("❌ Error enviando SMS al dueño");
+        logger.error(String(err));
+      }
+
+      // =======================================================
+      // CONTACTOS DE EMERGENCIA → SOLO LOGS (SIN SMS REAL)
+      // =======================================================
+
+      if (info.contactos.length > 0) {
+        logger.warn("📞 Contactos de emergencia (NO se envía SMS real):");
+
+        info.contactos.forEach((c: { nombre: string; telefono: string }) =>
+          logger.warn(` - ${c.nombre} (${c.telefono}): [SIMULADO] → ALERTA PUERTA ABIERTA`)
+        );
+      } else {
+        logger.warn("⚠️ No hay contactos de emergencia configurados.");
+      }
+
+
+      return;
+    }
+
+
+    // home/{deviceId}/door/closed
+    if (topic.startsWith(`home/${deviceId}/door/closed`)) {
+      const tipo = data.tipo || "PUERTA_CERRADA";
+      const valor = data.valor ?? "0";
+
+      await prisma.evento.create({
+        data: {
+          tipo,
+          valor: String(valor),
+          origen: "MQTT",
+          dispositivoId: dispositivo.id,
+          // sensorId: data.sensorId ?? null,
+        },
+      });
+
+      logger.info(`🔒 [${deviceId}] Evento puerta cerrada (valor=${valor})`);
+      return;
+    }
+
+    // home/{deviceId}/heartbeat
+    if (topic.startsWith(`home/${deviceId}/heartbeat`)) {
+      // upsertDispositivoOnline ya marcó online y ultimaConexion
+      logger.info(`💓 Heartbeat de ${deviceId} recibido.`);
+      return;
+    }
+
+    // home/{deviceId}/wifi/ack
+    if (topic.startsWith(`home/${deviceId}/wifi/ack`)) {
+      const status = data.status || "UNKNOWN";
+      logger.info(`📶 WiFi ACK de ${deviceId}: ${status} - ${raw}`);
+      // Por ahora solo log; si querés podés guardar en LogSistema.
+      return;
+    }
+
+    // Cualquier otro topic bajo home/ que no hayamos manejado
+    logger.warn(`MQTT sin handler específico: topic=${topic}`);
+
+  } catch (err) {
+    logger.error("❌ Error procesando MQTT");
+    logger.error(String(err));
   }
 });
 
-mqttClient.on("error", (err) => {
-  console.error("🔴 Error MQTT:", err);
-});
+// =======================================================
+// Monitor de dispositivos OFFLINE (CU04)
+// =======================================================
 
-mqttClient.on("reconnect", () => {
-  console.log("🟡 Reintentando conexión MQTT...");
-});
+const OFFLINE_THRESHOLD_MS =
+  Number(process.env.DEVICE_OFFLINE_MS) || 60_000; // 60s sin heartbeat
+const HEALTH_CHECK_INTERVAL_MS =
+  Number(process.env.DEVICE_HEALTH_INTERVAL_MS) || 30_000; // corre cada 30s
+
+setInterval(async () => {
+  const ahora = new Date();
+  const limite = new Date(ahora.getTime() - OFFLINE_THRESHOLD_MS);
+
+  try {
+    // 1) Buscar dispositivos que están marcados online,
+    //    pero cuya ultimaConexion es "vieja"
+    const candidatos = await prisma.dispositivo.findMany({
+      where: {
+        online: true,
+        ultimaConexion: { lt: limite },
+      },
+    });
+
+    if (candidatos.length === 0) {
+      return;
+    }
+
+    for (const disp of candidatos) {
+      // 2) Marcar como OFFLINE
+      await prisma.dispositivo.update({
+        where: { id: disp.id },
+        data: { online: false },
+      });
+
+      // 3) Crear evento DISPOSITIVO_OFFLINE
+      await prisma.evento.create({
+        data: {
+          tipo: "DISPOSITIVO_OFFLINE",
+          valor: "",
+          fechaHora: ahora,
+          origen: "BACKEND_CRON",
+          dispositivoId: disp.id,
+        },
+      });
+
+      const info = await resolverDestinatarios(disp.deviceId);
+
+      if (info) {
+        const { nombreCliente, telefonoCliente, numeroCasa } = info;
+        const smsBody = `Cliente: ${nombreCliente} – Casa ${numeroCasa} – El dispositivo está OFFLINE.`;
+        await sendTestSms(smsBody);
+        logger.info(`📴 SMS OFFLINE enviado a ${telefonoCliente ?? "sin número"}`);
+      } else {
+        await sendTestSms(`ALERTA: dispositivo ${disp.deviceId} está OFFLINE.`);
+        logger.warn(`📴 SMS OFFLINE genérico enviado para ${disp.deviceId}`);
+      }
+
+
+      logger.warn(
+        `📴 Dispositivo marcado OFFLINE: ${disp.deviceId} (id=${disp.id})`
+      );
+
+      await sendTestSms(
+        `ALERTA: dispositivo ${disp.deviceId} está OFFLINE. Verificar conexión.`
+      );
+
+      logger.warn(
+        `📴 SMS enviado para el dispositivo: ${disp.deviceId} (id=${disp.id})`
+      );
+
+    }
+  } catch (err) {
+    logger.error("Error en monitor de dispositivos OFFLINE");
+    logger.error(String(err));
+  }
+}, HEALTH_CHECK_INTERVAL_MS);
+
+
+export default client;

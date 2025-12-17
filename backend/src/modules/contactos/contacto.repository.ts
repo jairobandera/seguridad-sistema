@@ -2,8 +2,15 @@ import { prisma } from "../../core/database/prisma";
 import { CrearContactoDTO, ActualizarContactoDTO } from "./contacto.dto";
 
 export class ContactoRepository {
-  crear(data: CrearContactoDTO) {
-    return prisma.contactoEmergencia.create({ data });
+  crear(data: CrearContactoDTO, usuarioId: number) {
+    return prisma.contactoEmergencia.create({
+      data: {
+        nombre: data.nombre,
+        telefono: data.telefono,
+        relacion: data.relacion ?? null,
+        usuarioId: usuarioId,      // 👈 OBLIGATORIO
+      },
+    });
   }
 
   obtenerTodos() {
@@ -15,7 +22,7 @@ export class ContactoRepository {
 
   obtenerPorUsuario(usuarioId: number) {
     return prisma.contactoEmergencia.findMany({
-      where: { usuarioId },
+      where: { usuarioId, activo: true },
       include: { usuario: true },
       orderBy: { id: "desc" },
     });

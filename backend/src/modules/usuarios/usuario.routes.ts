@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { UsuarioController } from "./usuario.controller";
+import prisma from "../../core/prisma";
 import { auth } from "../../core/middleware/auth";
 import { requireRole } from "../../core/middleware/roles";
 
@@ -24,5 +25,29 @@ router.put("/:id", auth, (req, res) => controller.actualizar(req, res));
 router.delete("/:id", auth, requireRole("ADMIN"), (req, res) =>
   controller.eliminar(req, res)
 );
+
+// ===========================================
+// GUARDAR TOKEN FCM DEL USUARIO LOGUEADO
+// ===========================================
+router.post("/fcm-token", auth, async (req, res) => {
+  try {
+    const user = req.user as { id: number };
+
+    if (!req.body.token) {
+      return res.status(400).json({ error: "Token FCM requerido" });
+    }
+
+    await prisma.usuario.update({
+      where: { id: user.id },
+      data: { fcmToken: req.body.token },
+    });
+
+    res.json({ ok: true });
+  } catch (e: any) {
+    console.error(e);
+    res.status(500).json({ error: "Error guardando FCM token" });
+  }
+});
+
 
 export default router;

@@ -31,4 +31,7 @@ router.delete("/:id", auth, requireRole("ADMIN"), (req, res) =>
   controller.eliminar(req, res)
 );
 
+// Cambiar estado de alarma
+router.post("/:id/seguridad", auth, (req, res) => controller.cambiarSeguridad(req, res));
+
 export default router;

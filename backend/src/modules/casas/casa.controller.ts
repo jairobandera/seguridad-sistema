@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { CasaService } from "./casa.service";
+import prisma from "../../core/prisma";
 
 export class CasaController {
   private service = new CasaService();
@@ -44,4 +45,39 @@ export class CasaController {
       res.status(400).json({ error: err.message });
     }
   };
+
+  async cambiarSeguridad(req: Request, res: Response) {
+    try {
+      const casaId = Number(req.params.id);
+      const user = req.user as { id: number };
+      const userId = user.id; // viene del middleware auth
+
+      // 1) Verificar que la casa sea del usuario logueado
+      const casa = await prisma.casa.findFirst({
+        where: { id: casaId, usuarioId: userId },
+      });
+
+      if (!casa) {
+        return res.status(404).json({ error: "Casa no encontrada o no pertenece al usuario" });
+      }
+
+      // 2) Toggle automático (sin pedir nada en el body)
+      const nuevoEstado = !casa.alarmaArmada;
+
+      const actualizada = await prisma.casa.update({
+        where: { id: casaId },
+        data: { alarmaArmada: nuevoEstado },
+      });
+
+      return res.json({
+        message: `Seguridad ${nuevoEstado ? "ACTIVADA" : "DESACTIVADA"}`,
+        alarmaArmada: actualizada.alarmaArmada,
+      });
+
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ error: "Error cambiando estado de seguridad" });
+    }
+  }
+
 }

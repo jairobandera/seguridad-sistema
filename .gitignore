@@ -28,3 +28,14 @@ dist/
 
 # Carpeta personal
 info/
+
+
+# ===== Flutter - Front =====
+**/build/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+
+# IDE
+**/.idea/
+**/*.iml

@@ -40,4 +40,9 @@ router.post("/offline", (req, res) =>
   controller.marcarOffline(req, res)
 );
 
+router.post("/registrar", (req, res) =>
+  controller.registrar(req, res)
+);
+
+
 export default router;

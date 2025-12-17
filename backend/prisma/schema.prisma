@@ -18,7 +18,8 @@ model Usuario {
   activo        Boolean  @default(true)
   creadoEn      DateTime @default(now())
   actualizadoEn DateTime @updatedAt
-
+  fcmToken  String?
+  
   casas         Casa[]
   contactos     ContactoEmergencia[]
   notificaciones Notificacion[]
@@ -33,6 +34,7 @@ model Casa {
   numero    String?
   manzana   String?
   barrio    String?
+  alarmaArmada Boolean @default(false)
   activa    Boolean  @default(true)
   creadoEn  DateTime @default(now())
 
@@ -54,8 +56,8 @@ model Dispositivo {
   ultimaConexion  DateTime?
   creadoEn        DateTime @default(now())
 
-  casaId     Int
-  casa       Casa      @relation(fields: [casaId], references: [id])
+  casaId     Int?           // <<<<<<<<<<<< OPCIONAL
+  casa       Casa? @relation(fields: [casaId], references: [id])
 
   sensores   Sensor[]
   eventos    Evento[]

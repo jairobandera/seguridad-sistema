@@ -1,9 +1,10 @@
 import { DispositivoRepository } from "./dispositivo.repository";
-import { CrearDispositivoDTO, ActualizarDispositivoDTO } from "./dispositivo.dto";
+import { CrearDispositivoDTO, ActualizarDispositivoDTO, RegistrarDispositivoDTO } from "./dispositivo.dto";
 
 export class DispositivoService {
   private repo = new DispositivoRepository();
 
+  // Crear tradicional (desde panel admin)
   async crear(data: CrearDispositivoDTO) {
     const existe = await this.repo.obtenerPorDeviceId(data.deviceId);
     if (existe) throw new Error("Este deviceId ya está registrado.");
@@ -27,12 +28,31 @@ export class DispositivoService {
     return this.repo.eliminar(id);
   }
 
-  // Este se usa cuando el ESP32 se conecta vía MQTT
   marcarOnline(deviceId: string) {
     return this.repo.actualizarOnline(deviceId, true);
   }
 
   marcarOffline(deviceId: string) {
     return this.repo.actualizarOnline(deviceId, false);
+  }
+
+  // Registrar dispositivo manual (para emparejar MAC con casa)
+  async registrarDispositivo(data: RegistrarDispositivoDTO) {
+
+    if (!data.deviceId || data.deviceId.trim().length < 6) {
+      throw new Error("El deviceId (MAC) es inválido.");
+    }
+
+    if (!data.casaId || isNaN(data.casaId)) {
+      throw new Error("El campo casaId es obligatorio.");
+    }
+
+    const casa = await this.repo.casaExiste(data.casaId);
+    if (!casa) throw new Error(`La casa con ID ${data.casaId} no existe.`);
+
+    const yaExiste = await this.repo.existeDeviceId(data.deviceId);
+    if (yaExiste) throw new Error("Este dispositivo ya está registrado.");
+
+    return this.repo.registrar(data);
   }
 }

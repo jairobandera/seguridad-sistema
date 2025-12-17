@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { DispositivoService } from "./dispositivo.service";
+import { logger } from "../../core/logger";
 
 export class DispositivoController {
   private service = new DispositivoService();
@@ -51,4 +52,28 @@ export class DispositivoController {
     const result = await this.service.marcarOffline(deviceId);
     res.json(result);
   };
+
+  async registrar(req: Request, res: Response) {
+    try {
+      const body = req.body;
+
+      logger.info(`📥 Registrar Dispositivo → ${JSON.stringify(body)}`);
+
+      const dispositivo = await this.service.registrarDispositivo(body);
+
+      return res.status(201).json({
+        ok: true,
+        mensaje: "Dispositivo registrado correctamente",
+        data: dispositivo
+      });
+
+    } catch (err: any) {
+      logger.error(`❌ Error registrando dispositivo: ${err.message}`);
+      return res.status(400).json({
+        ok: false,
+        error: err.message
+      });
+    }
+  }
+
 }

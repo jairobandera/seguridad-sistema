@@ -1,12 +1,14 @@
 import { Request, Response } from "express";
 import { ContactoService } from "./contacto.service";
+import prisma from "../../core/prisma";
 
 export class ContactoController {
   private service = new ContactoService();
 
   crear = async (req: Request, res: Response) => {
     try {
-      const contacto = await this.service.crear(req.body);
+      const user = req.user as { id: number };
+      const contacto = await this.service.crear(req.body, user.id);
       res.json(contacto);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -44,5 +46,33 @@ export class ContactoController {
     const id = Number(req.params.id);
     const contacto = await this.service.eliminar(id);
     res.json(contacto);
+  };
+
+  // Obtener mis contactos
+  obtenerMisContactos = async (req: Request, res: Response) => {
+    const user = req.user as { id: number };
+    const contactos = await prisma.contactoEmergencia.findMany({
+      where: { usuarioId: user.id, activo: true },
+    });
+    res.json(contactos);
+  };
+
+  // Guardar máximo dos contactos
+  guardarContactos = async (req: Request, res: Response) => {
+    try {
+      const user = req.user as { id: number };
+      const nuevos = req.body.contactos;
+
+      if (!Array.isArray(nuevos) || nuevos.length > 2) {
+        return res.status(400).json({ error: "Máximo 2 contactos permitidos" });
+      }
+
+      const actualizados = await this.service.guardarContactos(user.id, nuevos);
+      res.json(actualizados);
+
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ error: "Error guardando contactos" });
+    }
   };
 }

@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import meRoutes from "./routes/me.routes";
 
 dotenv.config();
 
@@ -10,7 +11,17 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Rutas
+// Rutas públicas (NO requieren token)
+import authRoutes from "./routes/auth.routes";
+app.use("/auth", authRoutes);
+app.use("/api/auth", authRoutes); 
+app.use("/api", meRoutes);
+
+// ⚠️ IMPORTANTE: aplicar JWT DESPUÉS de /auth
+import { authMiddleware } from "./middleware/auth.middleware";
+app.use("/api", authMiddleware);
+
+// Rutas protegidas
 import usuarioRoutes from "./modules/usuarios/usuario.routes";
 import casaRoutes from "./modules/casas/casa.routes";
 import dispositivoRoutes from "./modules/dispositivos/dispositivo.routes";
@@ -20,10 +31,10 @@ import notificacionRoutes from "./modules/notificaciones/notificacion.routes";
 import contactoRoutes from "./modules/contactos/contacto.routes";
 import sesionRoutes from "./modules/sesiones/sesion.routes";
 import logRoutes from "./modules/logs/log.routes";
+import homeRoutes from "./routes/home.routes";
 
-// Prefijos (muy importante para orden)
 app.use("/api/usuarios", usuarioRoutes);
-app.use("/api/casas", casaRoutes);
+app.use("/api/casa", casaRoutes);
 app.use("/api/dispositivos", dispositivoRoutes);
 app.use("/api/sensores", sensorRoutes);
 app.use("/api/eventos", eventoRoutes);
@@ -31,6 +42,7 @@ app.use("/api/notificaciones", notificacionRoutes);
 app.use("/api/contactos", contactoRoutes);
 app.use("/api/sesiones", sesionRoutes);
 app.use("/api/logs", logRoutes);
+app.use("/home", homeRoutes);
 
 // Ruta mínima para probar
 app.get("/status", (req, res) => {

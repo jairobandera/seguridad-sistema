@@ -13,3 +13,9 @@ export interface ActualizarDispositivoDTO {
   online?: boolean;
   ultimaConexion?: Date;
 }
+
+export interface RegistrarDispositivoDTO {
+  deviceId: string;
+  nombre?: string;
+  casaId: number;
+}
