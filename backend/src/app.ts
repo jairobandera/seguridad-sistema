@@ -32,6 +32,7 @@ import contactoRoutes from "./modules/contactos/contacto.routes";
 import sesionRoutes from "./modules/sesiones/sesion.routes";
 import logRoutes from "./modules/logs/log.routes";
 import homeRoutes from "./routes/home.routes";
+import guardiaRoutes from "./modules/guardias/guardia.routes";
 
 app.use("/api/usuarios", usuarioRoutes);
 app.use("/api/casa", casaRoutes);
@@ -43,6 +44,7 @@ app.use("/api/contactos", contactoRoutes);
 app.use("/api/sesiones", sesionRoutes);
 app.use("/api/logs", logRoutes);
 app.use("/home", homeRoutes);
+app.use("/api/guardia", guardiaRoutes);
 
 // Ruta mínima para probar
 app.get("/status", (req, res) => {

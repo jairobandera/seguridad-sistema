@@ -21,6 +21,7 @@
     "firebase-admin": "^13.6.0",
     "jsonwebtoken": "^9.0.2",
     "mqtt": "^5.14.1",
+    "socket.io": "^4.8.1",
     "twilio": "^5.10.6"
   },
   "devDependencies": {

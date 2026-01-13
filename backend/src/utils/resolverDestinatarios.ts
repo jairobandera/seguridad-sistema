@@ -8,7 +8,7 @@ export async function resolverDestinatarios(deviceId: string) {
         include: {
           usuario: {
             include: {
-              contactos: true, // 👈 ESTA ES LA RELACIÓN REAL
+              contactos: true,
             },
           },
         },
@@ -25,19 +25,28 @@ export async function resolverDestinatarios(deviceId: string) {
 
   return {
     dispositivoId: dispositivo.id,
+
+    // 🏠 CASA
     casaId: casa.id,
-    nombreCliente: `${usuario.nombre ?? ""} ${usuario.apellido ?? ""}`.trim(),
-    telefonoCliente: usuario.telefono,
     codigoCasa: casa.codigo ?? "",
     numeroCasa: casa.numero ?? "",
+    calle: casa.calle ?? null,
+    manzana: casa.manzana ?? null,
+    barrio: casa.barrio ?? null,
     alarmaArmada: casa.alarmaArmada ?? false,
 
-    // 👇 contactos del usuario, NO de la casa
+    // 👤 CLIENTE
+    usuarioId: usuario.id,
+    nombreCliente: usuario.nombre ?? "",
+    apellidoCliente: usuario.apellido ?? "",
+    telefonoCliente: usuario.telefono ?? null,
+    fcmToken: usuario.fcmToken ?? null,
+
+    // 📞 CONTACTOS
     contactos: usuario.contactos.map((c) => ({
       id: c.id,
       nombre: c.nombre,
       telefono: c.telefono,
     })),
-     fcmToken: usuario.fcmToken ?? null,
   };
 }

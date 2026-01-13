@@ -23,7 +23,7 @@ class ApiClient {
   String? token;
 
   /// Base URL del backend
-  static const String baseUrl = 'http://192.168.1.12:3000';
+  static const String baseUrl = 'http://192.168.1.9:3000';
 
   final http.Client _http = http.Client();
 

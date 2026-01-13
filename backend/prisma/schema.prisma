@@ -24,6 +24,7 @@ model Usuario {
   contactos     ContactoEmergencia[]
   notificaciones Notificacion[]
   sesiones      Sesion[]
+  eventosAtendidos EventoEstado[] @relation("GuardiaEventos")
 }
 
 
@@ -92,6 +93,7 @@ model Evento {
   sensor        Sensor?  @relation(fields: [sensorId], references: [id])
 
   notificaciones Notificacion[]
+  estado        EventoEstado?
 }
 
 model ContactoEmergencia {
@@ -152,4 +154,20 @@ model LogSistema {
   origen    String?
   fechaHora DateTime @default(now())
 }
+
+model EventoEstado {
+  id           Int      @id @default(autoincrement())
+  eventoId     Int      @unique
+  leido        Boolean  @default(false)
+  atendido     Boolean  @default(false)
+  leidoEn      DateTime?
+  atendidoEn   DateTime?
+
+  guardiaId    Int?
+  guardia      Usuario? @relation("GuardiaEventos", fields: [guardiaId], references: [id])
+
+  evento       Evento   @relation(fields: [eventoId], references: [id])
+}
+
+
 

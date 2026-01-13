@@ -6,9 +6,8 @@ import '../../../core/api/api_client.dart';
 import '../../../core/auth/auth_service.dart';
 import '../../../core/storage/session_manager.dart';
 
-import '../../cliente/pages/dashboard_cliente.dart';
-import '../../admin/pages/dashboard_admin.dart';
-import '../../guardia/pages/dashboard_guardia.dart';
+//import '../../cliente/pages/dashboard_cliente.dart';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 
 class LoginPage extends StatefulWidget {
@@ -24,6 +23,7 @@ class _LoginPageState extends State<LoginPage> {
   final _passCtrl = TextEditingController();
 
   bool loading = false;
+  bool rememberMe = true;
   bool showPass = false;
   String? errorText;
 
@@ -44,6 +44,13 @@ class _LoginPageState extends State<LoginPage> {
         email: _emailCtrl.text.trim(),
         password: _passCtrl.text.trim(),
       );
+
+      //Recordarme: persistente vs solo en memoria
+      if (rememberMe) {
+        await SessionManager.saveToken(token);
+      } else {
+        await SessionManager.saveTokenEphemeral(token);
+      }
 
       // 🔥 Guardamos el token en SessionManager
       await SessionManager.saveToken(token);
@@ -91,20 +98,11 @@ class _LoginPageState extends State<LoginPage> {
 
       // Navegación según Rol
       if (role == "CLIENTE") {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const DashboardCliente()),
-        );
+        Navigator.pushReplacementNamed(context, "/cliente");
       } else if (role == "GUARDIA") {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const DashboardGuardia()),
-        );
+        Navigator.pushReplacementNamed(context, "/guardia");
       } else if (role == "ADMIN") {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const DashboardAdmin()),
-        );
+        Navigator.pushReplacementNamed(context, "/admin");
       } else {
         setState(() => errorText = "Rol desconocido");
       }
@@ -196,6 +194,28 @@ class _LoginPageState extends State<LoginPage> {
                     _passwordDark(),
 
                     const SizedBox(height: 35),
+
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: rememberMe,
+                          onChanged: (v) =>
+                              setState(() => rememberMe = v ?? true),
+                          activeColor: Colors.blueAccent,
+                          checkColor: Colors.white,
+                          side:
+                              BorderSide(color: Colors.white.withOpacity(0.35)),
+                        ),
+                        const SizedBox(width: 6),
+                        const Text(
+                          "Recordarme",
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
 
                     SizedBox(
                       width: double.infinity,

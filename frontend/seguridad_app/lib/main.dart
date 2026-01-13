@@ -1,4 +1,7 @@
+// lib/main.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
@@ -7,7 +10,7 @@ import 'core/storage/session_manager.dart';
 import 'core/notificacion/notification_service.dart';
 
 // ===============================
-// Handler para notificaciones en background
+// Handler para notificaciones en background (SOLO móvil)
 // ===============================
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
@@ -17,39 +20,21 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ===============================
-  // Inicializar Firebase
-  // ===============================
-  await Firebase.initializeApp();
-
-  await NotificationService.initialize();
-
-  // Notificaciones recibidas mientras la app está ABIERTA
-  /*FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-    final title = message.notification?.title ??
-        message.data['title']?.toString() ??
-        'Alerta';
-
-    final body =
-        message.notification?.body ?? message.data['body']?.toString() ?? '';
-
-    print("📩 Notificación FOREGROUND → $title | $body");
-
-    // ESTA es la que usa tu canal con alarma.mp3
-    await NotificationService.showNotification(title, body);
-  });*/ //Esto comentado es para que suene aun estando en la app abierta
-
-  FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-    print("📩 Notificación abierta por el usuario");
-  });
-
-  // Registrar handler de notificaciones en segundo plano
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-
-  // ===============================
-  // Inicializar sesión (lo que ya tenías)
-  // ===============================
+  // Sesión
   await SessionManager.init();
+
+  //Firebase SOLO en móvil (Android/iOS)
+  if (!kIsWeb) {
+    await Firebase.initializeApp();
+
+    await NotificationService.initialize();
+
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      print("📩 Notificación abierta por el usuario");
+    });
+
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  }
 
   runApp(const MyApp());
 }

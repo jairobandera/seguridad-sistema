@@ -11,7 +11,7 @@ const router = Router();
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    console.log("📩 Login recibido:", email, password);
+    console.log("📩 Login recibido:", email);
 
     if (!email || !password) {
       return res.status(400).json({ ok: false, error: "Faltan datos" });
@@ -37,7 +37,7 @@ router.post("/login", async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user.id, rol: user.rol },
+      { id: user.id, email: user.email, rol: user.rol },
       process.env.JWT_SECRET!,
       { expiresIn: "7d" }
     );

@@ -3,9 +3,13 @@ import 'package:jwt_decoder/jwt_decoder.dart';
 
 class SessionManager {
   static late SharedPreferences _prefs;
+  static String? _ephemeralToken;
 
   static Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
+
+    // Si querés: recuperar token a memoria (no es obligatorio)
+    _ephemeralToken = null;
   }
 
   static String? getRoleFromToken(String token) {
@@ -22,16 +26,27 @@ class SessionManager {
     _prefs.setString("rol", rol);
   }
 
+  // ✅ Persistente (recordarme)
   static Future<void> saveToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString("token", token);
+    await _prefs.setString("token", token);
   }
 
+  // ✅ Token: primero memoria (si existe), si no prefs
+  static String? getToken() => _ephemeralToken ?? _prefs.getString("token");
 
-  static String? getToken() => _prefs.getString("token");
   static String? getRole() => _prefs.getString("rol");
 
   static Future<void> clear() async {
+    _ephemeralToken = null;
     await _prefs.clear();
+  }
+
+  // ✅ Solo sesión actual (no recordarme)
+  static Future<void> saveTokenEphemeral(String token) async {
+    _ephemeralToken = token;
+  }
+
+  static Future<void> clearEphemeral() async {
+    _ephemeralToken = null;
   }
 }

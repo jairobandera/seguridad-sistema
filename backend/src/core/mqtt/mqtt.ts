@@ -4,6 +4,8 @@ import { logger } from "../logger";
 import { sendTestSms } from "../twilio";
 import { resolverDestinatarios } from "../../utils/resolverDestinatarios";
 import { notificarFCM } from "../notificaciones/fcm";
+import { getIO } from "../socket/socket";
+import { buildEventDTO } from "../factories/event.factory";
 
 const mqttUrl = process.env.MQTT_URL || "mqtt://192.168.1.50:1883";
 
@@ -169,7 +171,7 @@ client.on("message", async (topic, payload) => {
       const valor = data.valor ?? "1";
 
       // Siempre guardar evento primero
-      await prisma.evento.create({
+      const eventoDb = await prisma.evento.create({
         data: {
           tipo,
           valor: String(valor),
@@ -178,10 +180,54 @@ client.on("message", async (topic, payload) => {
         },
       });
 
+      // 👇 crear estado inicial del evento
+      await prisma.eventoEstado.create({
+        data: {
+          eventoId: eventoDb.id,
+        },
+      });
+
       logger.info(`🚪 [${deviceId}] Evento puerta abierta (valor=${valor})`);
 
       // ► Obtener datos del cliente / casa / alarma
       const info = await resolverDestinatarios(deviceId);
+
+      // ► Construir evento estándar
+      const evento = buildEventDTO({
+        tipo: "PUERTA_ABIERTA",
+        severidad: "CRITICAL",
+
+        dispositivo: {
+          deviceId,
+          nombre: dispositivo.nombre,
+          online: dispositivo.online,
+        },
+
+        casa: info
+          ? {
+            id: info.casaId,
+            codigo: info.codigoCasa,
+            numero: info.numeroCasa,
+            calle: info.calle,
+            manzana: info.manzana,
+            barrio: info.barrio,
+            alarmaArmada: info.alarmaArmada,
+          }
+          : undefined,
+
+        cliente: info
+          ? {
+            id: info.usuarioId,
+            nombre: info.nombreCliente,
+            apellido: info.apellidoCliente,
+            telefono: info.telefonoCliente,
+          }
+          : undefined,
+      });
+
+      // ► Emitir a GUARDIAS
+      getIO().to("GUARDIAS").emit("evento", evento);
+
 
       if (!info) {
         logger.warn("No se encontró casa/usuario para este dispositivo.");
@@ -201,16 +247,6 @@ client.on("message", async (topic, payload) => {
           `Casa ${info.numeroCasa} – ${info.nombreCliente}`
         );
       }
-
-      // --- SI LLEGAMOS AQUÍ → Alarma activada → enviar SMS ---
-      /*const smsBody = `Cliente: ${info.nombreCliente} – Casa ${info.numeroCasa} – La puerta se abrió`;
-      try {
-        await sendTestSms(smsBody);
-        logger.info("📨 SMS enviado correctamente (alarma armada)");
-      } catch (err) {
-        logger.error("❌ Error enviando SMS");
-        logger.error(String(err));
-      }*/
       // =======================================================
       // ALERTA: ENVIAR SMS REAL AL DUEÑO
       // =======================================================
@@ -249,17 +285,61 @@ client.on("message", async (topic, payload) => {
       const tipo = data.tipo || "PUERTA_CERRADA";
       const valor = data.valor ?? "0";
 
-      await prisma.evento.create({
+      // guardar evento
+      const eventoDb = await prisma.evento.create({
         data: {
           tipo,
           valor: String(valor),
           origen: "MQTT",
           dispositivoId: dispositivo.id,
-          // sensorId: data.sensorId ?? null,
         },
       });
 
+      // crear estado inicial (para contadores)
+      await prisma.eventoEstado.create({
+        data: { eventoId: eventoDb.id },
+      });
+
       logger.info(`🔒 [${deviceId}] Evento puerta cerrada (valor=${valor})`);
+
+      // resolver info para armar DTO “lindo”
+      const info = await resolverDestinatarios(deviceId);
+
+      const evento = buildEventDTO({
+        tipo: "PUERTA_CERRADA",
+        severidad: "INFO",
+
+        dispositivo: {
+          deviceId,
+          nombre: dispositivo.nombre,
+          online: dispositivo.online,
+        },
+
+        casa: info
+          ? {
+            id: info.casaId,
+            codigo: info.codigoCasa,
+            numero: info.numeroCasa,
+            calle: info.calle,
+            manzana: info.manzana,
+            barrio: info.barrio,
+            alarmaArmada: info.alarmaArmada,
+          }
+          : undefined,
+
+        cliente: info
+          ? {
+            id: info.usuarioId,
+            nombre: info.nombreCliente,
+            apellido: info.apellidoCliente,
+            telefono: info.telefonoCliente,
+          }
+          : undefined,
+      });
+
+      // emitir realtime a guardias
+      getIO().to("GUARDIAS").emit("evento", evento);
+
       return;
     }
 
@@ -322,7 +402,7 @@ setInterval(async () => {
       });
 
       // 3) Crear evento DISPOSITIVO_OFFLINE
-      await prisma.evento.create({
+      const eventoDb = await prisma.evento.create({
         data: {
           tipo: "DISPOSITIVO_OFFLINE",
           valor: "",
@@ -332,15 +412,67 @@ setInterval(async () => {
         },
       });
 
+      // 👇 crear estado inicial del evento
+      await prisma.eventoEstado.create({
+        data: {
+          eventoId: eventoDb.id,
+        },
+      });
+
+
+      // ► Resolver info (si existe)
       const info = await resolverDestinatarios(disp.deviceId);
 
+      // ► Construir evento estándar
+      const evento = buildEventDTO({
+        tipo: "DISPOSITIVO_OFFLINE",
+        severidad: "CRITICAL",
+
+        dispositivo: {
+          deviceId: disp.deviceId,
+          nombre: disp.nombre,
+          online: false,
+        },
+
+        casa: info
+          ? {
+            id: info.casaId,
+            codigo: info.codigoCasa,
+            numero: info.numeroCasa,
+            calle: info.calle,
+            manzana: info.manzana,
+            barrio: info.barrio,
+          }
+          : undefined,
+
+        cliente: info
+          ? {
+            id: info.usuarioId,
+            nombre: info.nombreCliente,
+            apellido: info.apellidoCliente,
+            telefono: info.telefonoCliente,
+          }
+          : undefined,
+      });
+
+      // ► Emitir a GUARDIAS
+      getIO().to("GUARDIAS").emit("evento", evento);
+
+
       if (info) {
+
+        // ► Si la alarma no está activada, NO mandar SMS
+        if (!info.alarmaArmada) {
+          logger.info("🔕 Alarma desactivada → NO se envía SMS de dispositivo offline.");
+          return;
+        }
+
         const { nombreCliente, telefonoCliente, numeroCasa } = info;
         const smsBody = `Cliente: ${nombreCliente} – Casa ${numeroCasa} – El dispositivo está OFFLINE.`;
         await sendTestSms(smsBody);
         logger.info(`📴 SMS OFFLINE enviado a ${telefonoCliente ?? "sin número"}`);
       } else {
-        await sendTestSms(`ALERTA: dispositivo ${disp.deviceId} está OFFLINE.`);
+        //await sendTestSms(`ALERTA: dispositivo ${disp.deviceId} está OFFLINE.`);
         logger.warn(`📴 SMS OFFLINE genérico enviado para ${disp.deviceId}`);
       }
 
