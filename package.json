@@ -1,0 +1,4 @@
+"scripts": {
+  "dev": "ts-node-dev --respawn --transpile-only src/index.js",
+  "start": "node src/index.js"
+}
