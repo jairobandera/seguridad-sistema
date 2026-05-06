@@ -29,7 +29,6 @@ dist/
 # Carpeta personal
 info/
 
-
 # ===== Flutter - Front =====
 **/build/
 **/.dart_tool/
@@ -42,3 +41,10 @@ info/
 
 # Firebase / Google credentials
 backend/firebase/service-account.json
+
+# ===== ESP32 Firmware =====
+esp32/build/
+esp32/*.bin
+esp32/*.elf
+esp32/*.map
+**/seguridad_esp32/build/

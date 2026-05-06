@@ -45,4 +45,11 @@ router.post("/registrar", (req, res) =>
 );
 
 
+router.post('/:id/factory-reset', controller.factoryReset.bind(controller));
+
+router.get('/mqtt-status', controller.mqttStatus.bind(controller));
+
+// Obtener estado WiFi de un dispositivo (para Flutter)
+router.get('/:deviceId/wifi-status', controller.obtenerEstadoWifi.bind(controller));
+
 export default router;

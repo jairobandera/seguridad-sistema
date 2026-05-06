@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { DispositivoService } from "./dispositivo.service";
 import { logger } from "../../core/logger";
+import { mqttStats } from "../../core/mqtt/mqtt";
 
 export class DispositivoController {
   private service = new DispositivoService();
@@ -53,6 +54,31 @@ export class DispositivoController {
     res.json(result);
   };
 
+  factoryReset = async (req: Request, res: Response) => {
+    try {
+      const param = req.params.id;
+      // intentar como id numérico primero, si no, como deviceId
+      let dispositivo: any = null;
+      const id = Number(param);
+      if (!isNaN(id) && id > 0) {
+        dispositivo = await this.service.obtenerPorId(id);
+      }
+      if (!dispositivo) {
+        dispositivo = await this.service.obtenerPorDeviceId(param);
+      }
+      if (!dispositivo) return res.status(404).json({ ok: false, error: 'Dispositivo no encontrado' });
+
+      // publicar comando MQTT
+      const { publishFactoryReset } = await import('./dispositivo.mqtt');
+      await publishFactoryReset(dispositivo.deviceId);
+
+      return res.json({ ok: true, message: 'Comando enviado' });
+    } catch (err: any) {
+      logger.error(String(err));
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  };
+
   async registrar(req: Request, res: Response) {
     try {
       const body = req.body;
@@ -76,4 +102,20 @@ export class DispositivoController {
     }
   }
 
+  mqttStatus = async (_req: Request, res: Response) => {
+    res.json({
+      ok: true,
+      data: mqttStats,
+    });
+  };
+
+  obtenerEstadoWifi = async (req: Request, res: Response) => {
+    try {
+      const deviceId = req.params.deviceId;
+      const estado = await this.service.obtenerEstadoWifi(deviceId);
+      res.json({ ok: true, data: estado });
+    } catch (err: any) {
+      res.status(404).json({ ok: false, error: err.message });
+    }
+  };
 }

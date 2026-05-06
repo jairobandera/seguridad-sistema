@@ -20,6 +20,10 @@ export class DispositivoService {
     return this.repo.obtenerPorId(id);
   }
 
+  obtenerPorDeviceId(deviceId: string) {
+    return this.repo.obtenerPorDeviceId(deviceId);
+  }
+
   actualizar(id: number, data: ActualizarDispositivoDTO) {
     return this.repo.actualizar(id, data);
   }
@@ -54,5 +58,21 @@ export class DispositivoService {
     if (yaExiste) throw new Error("Este dispositivo ya está registrado.");
 
     return this.repo.registrar(data);
+  }
+
+  // Obtener estado WiFi de un dispositivo
+  async obtenerEstadoWifi(deviceId: string) {
+    const dispositivo = await this.repo.obtenerPorDeviceId(deviceId);
+    if (!dispositivo) {
+      throw new Error("Dispositivo no encontrado");
+    }
+
+    return {
+      deviceId: dispositivo.deviceId,
+      online: dispositivo.online,
+      wifiSsid: dispositivo.wifiSsid || null,
+      wifiRssi: dispositivo.wifiRssi || null,
+      ultimaConexion: dispositivo.ultimaConexion,
+    };
   }
 }

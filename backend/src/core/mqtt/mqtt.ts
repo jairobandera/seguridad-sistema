@@ -7,7 +7,22 @@ import { notificarFCM } from "../notificaciones/fcm";
 import { getIO } from "../socket/socket";
 import { buildEventDTO } from "../factories/event.factory";
 
-const mqttUrl = process.env.MQTT_URL || "mqtt://192.168.1.50:1883";
+//const mqttUrl = process.env.MQTT_URL || "mqtt://192.168.1.50:1883";
+const mqttUrl = process.env.MQTT_URL || "mqtt://192.168.1.34:1883";
+
+// =======================================================
+// Diagnóstico MQTT (exportado para endpoint)
+// =======================================================
+export const mqttStats = {
+  connected: false,
+  url: mqttUrl,
+  messagesReceived: 0,
+  lastMessage: null as string | null,
+  lastMessageTime: null as string | null,
+  lastHeartbeat: null as string | null,
+  lastRegister: null as string | null,
+  errors: [] as string[],
+};
 
 const client = mqtt.connect(mqttUrl, {
   clientId: "backend-" + Math.random().toString(16).slice(2),
@@ -47,6 +62,16 @@ async function upsertDispositivoOnline(deviceId: string) {
       ultimaConexion: ahora,
     },
   });
+}
+
+// Emitir por socket que el dispositivo está online
+async function emitDeviceOnline(deviceId: string) {
+  try {
+    const io = getIO();
+    io.emit('device:updated', { deviceId, online: true, timestamp: new Date().toISOString() });
+  } catch (e) {
+    logger.warn('Error emitiendo evento device:updated: ' + String(e));
+  }
 }
 
 // Parsea JSON sin tirar el proceso
@@ -103,6 +128,8 @@ async function buildDoorOpenedSms(deviceId: string): Promise<string> {
 // =======================================================
 client.on("connect", () => {
   logger.info("🔌 Conectado a MQTT: " + mqttUrl);
+  mqttStats.connected = true;
+  mqttStats.errors = [];
 
   // Registro inicial de dispositivo
   client.subscribe("home/register", (err) => {
@@ -127,6 +154,30 @@ client.on("connect", () => {
   client.subscribe("home/+/wifi/ack", (err) => {
     logger.info("sub home/+/wifi/ack: " + (err || "OK"));
   });
+  // Comandos remotos (factory reset)
+  client.subscribe("home/+/cmd", (err) => {
+    logger.info("sub home/+/cmd: " + (err || "OK"));
+  });
+
+  client.subscribe("home/+/status", (err) => {
+    logger.info("sub home/+/status: " + (err || "OK"));
+  });
+});
+
+client.on("error", (err) => {
+  logger.error("❌ MQTT error: " + err.message);
+  mqttStats.connected = false;
+  mqttStats.errors.push(err.message);
+  if (mqttStats.errors.length > 20) mqttStats.errors.shift();
+});
+
+client.on("close", () => {
+  logger.warn("⚠️ MQTT conexión cerrada");
+  mqttStats.connected = false;
+});
+
+client.on("reconnect", () => {
+  logger.info("🔄 MQTT reconectando...");
 });
 
 // =======================================================
@@ -134,6 +185,9 @@ client.on("connect", () => {
 // =======================================================
 client.on("message", async (topic, payload) => {
   const raw = payload.toString();
+  mqttStats.messagesReceived++;
+  mqttStats.lastMessage = `${topic}: ${raw}`;
+  mqttStats.lastMessageTime = new Date().toISOString();
   logger.info(`📩 MQTT [${topic}]: ${raw}`);
 
   try {
@@ -149,6 +203,7 @@ client.on("message", async (topic, payload) => {
 
       const disp = await upsertDispositivoOnline(deviceId);
       logger.info(`✅ Dispositivo registrado/actualizado: ${disp.deviceId} (id=${disp.id})`);
+      mqttStats.lastRegister = `${deviceId} at ${new Date().toISOString()}`;
       return;
     }
 
@@ -164,6 +219,45 @@ client.on("message", async (topic, payload) => {
 
     // Normalizamos y dejamos el dispositivo en online
     const dispositivo = await upsertDispositivoOnline(deviceId);
+
+    // home/{deviceId}/status - MOVER ESTE HANDLER PRIMERO (antes que door/open)
+    if (topic.startsWith(`home/${deviceId}/status`)) {
+      const status = data.status || "UNKNOWN";
+      const ssid = data.ssid || null;
+      const rssi = data.rssi || null;
+      const wifi = data.wifi;
+      const mqtt = data.mqtt;
+
+      logger.info(`📡 STATUS ${deviceId}: ${status} | SSID="${ssid || 'N/A'}" | RSSI=${rssi || 'N/A'} | WiFi=${wifi} | MQTT=${mqtt}`);
+
+      await prisma.dispositivo.update({
+        where: { deviceId },
+        data: {
+          online: status === "MQTT_CONNECTED" || status === "WIFI_CONNECTED",
+          ultimaConexion: new Date(),
+          wifiSsid: ssid,
+          wifiRssi: rssi,
+        },
+      });
+
+      // Emitir a frontend con toda la info
+      try {
+        const io = getIO();
+        io.emit("device:status", {
+          deviceId,
+          status,
+          wifi,
+          mqtt,
+          ssid,
+          rssi,
+          timestamp: new Date().toISOString(),
+        });
+      } catch (e) {
+        logger.warn("Error emitiendo device:status: " + String(e));
+      }
+
+      return;
+    }
 
     // home/{deviceId}/door/open
     if (topic.startsWith(`home/${deviceId}/door/open`)) {
@@ -347,6 +441,7 @@ client.on("message", async (topic, payload) => {
     if (topic.startsWith(`home/${deviceId}/heartbeat`)) {
       // upsertDispositivoOnline ya marcó online y ultimaConexion
       logger.info(`💓 Heartbeat de ${deviceId} recibido.`);
+      mqttStats.lastHeartbeat = `${deviceId} at ${new Date().toISOString()}`;
       return;
     }
 
@@ -354,7 +449,12 @@ client.on("message", async (topic, payload) => {
     if (topic.startsWith(`home/${deviceId}/wifi/ack`)) {
       const status = data.status || "UNKNOWN";
       logger.info(`📶 WiFi ACK de ${deviceId}: ${status} - ${raw}`);
-      // Por ahora solo log; si querés podés guardar en LogSistema.
+      return;
+    }
+
+    // home/{deviceId}/cmd -> podemos loggear comandos entrantes
+    if (topic.startsWith(`home/${deviceId}/cmd`)) {
+      logger.info(`📨 Comando CMD recibido para ${deviceId}: ${raw}`);
       return;
     }
 
@@ -372,9 +472,9 @@ client.on("message", async (topic, payload) => {
 // =======================================================
 
 const OFFLINE_THRESHOLD_MS =
-  Number(process.env.DEVICE_OFFLINE_MS) || 60_000; // 60s sin heartbeat
+  Number(process.env.DEVICE_OFFLINE_MS) || 30_000; // 30s sin heartbeat (reducido de 60s)
 const HEALTH_CHECK_INTERVAL_MS =
-  Number(process.env.DEVICE_HEALTH_INTERVAL_MS) || 30_000; // corre cada 30s
+  Number(process.env.DEVICE_HEALTH_INTERVAL_MS) || 15_000; // corre cada 15s (más frecuente)
 
 setInterval(async () => {
   const ahora = new Date();

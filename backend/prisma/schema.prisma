@@ -55,6 +55,8 @@ model Dispositivo {
   firmwareVersion String?
   online          Boolean  @default(false)
   ultimaConexion  DateTime?
+  wifiSsid        String?
+  wifiRssi        Int?
   creadoEn        DateTime @default(now())
 
   casaId     Int?           // <<<<<<<<<<<< OPCIONAL
