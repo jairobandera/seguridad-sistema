@@ -44,7 +44,9 @@ dependencies:
   firebase_messaging: ^15.1.0
   flutter_local_notifications: ^18.0.1
   url_launcher: ^6.3.1
-  wifi_iot: ^0.3.19
+  flutter_reactive_ble: ^5.3.0
+  permission_handler: ^11.3.0
+  network_info_plus: ^4.0.0
   socket_io_client: ^2.0.3+1
 
 dev_dependencies:

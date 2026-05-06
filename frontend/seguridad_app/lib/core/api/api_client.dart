@@ -23,7 +23,8 @@ class ApiClient {
   String? token;
 
   /// Base URL del backend
-  static const String baseUrl = 'http://192.168.1.9:3000';
+  static const String baseUrl = 'http://192.168.1.34:3000';
+  //static const String baseUrl = 'https://seguridad-sistema.onrender.com';
 
   final http.Client _http = http.Client();
 
