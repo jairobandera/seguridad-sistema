@@ -2,8 +2,18 @@ import admin from "firebase-admin";
 import fs from "fs";
 
 // Cargar credenciales desde el archivo JSON
-const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH!;
-const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, "utf8"));
+let serviceAccount;
+
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  // Producción (Render)
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+} else {
+  // Desarrollo local
+  const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH!;
+  serviceAccount = JSON.parse(
+    fs.readFileSync(serviceAccountPath, "utf8")
+  );
+}
 
 if (!admin.apps.length) {
   admin.initializeApp({
