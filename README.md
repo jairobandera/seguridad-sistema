@@ -263,7 +263,30 @@ cd frontend/seguridad_app
 flutter pub get
 ```
 
-### 3️⃣ Configurar Firebase (opcional)
+### 3️ Configurar API del Backend
+
+**Importante:** La aplicación Flutter necesita saber la IP de tu servidor backend.
+
+1. Abrir `frontend/seguridad_app/lib/core/api/api_client.dart`
+
+2. Buscar línea ~26:
+```dart
+static const String baseUrl = 'http://192.168.1.17:3000';
+```
+
+3. Cambiar la IP por la de tu servidor:
+```dart
+static const String baseUrl = 'http://TU_IP_DEL_SERVIDOR:3000';
+```
+
+**Ejemplos:**
+- **Desarrollo local (misma red):** `http://192.168.1.17:3000` (tu IP local)
+- **Producción:** `https://api.tudominio.com`
+- **Emulador Android:** `http://10.0.2.2:3000` (localhost del emulador)
+
+**Nota:** Esta IP debe coincidir con `API_BASE_URL` en `backend/.env`
+
+### 4️ Configurar Firebase (opcional)
 
 Colocar `google-services.json` en `android/app/` para notificaciones push.
 
