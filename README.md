@@ -131,9 +131,13 @@ git clone https://github.com/jairobandera/seguridad-sistema.git
 cd seguridad-sistema/backend
 ```
 
-### 2️⃣ Instalar dependencias
+### 2️ Instalar dependencias
 
 ```sh
+# Con pnpm (recomendado - más rápido y seguro)
+pnpm install
+
+# O con npm (alternativa)
 npm install
 ```
 
@@ -383,20 +387,23 @@ GET http://localhost:3000/api/dispositivos/mqtt-status
 ### Backend
 
 ```sh
+# Instalación de dependencias (recomendado)
+pnpm install
+
 # Desarrollo con hot reload
-npm run dev
+pnpm run dev
 
 # Abrir Prisma Studio
-npx prisma studio
+pnpm prisma studio
 
 # Regenerar cliente Prisma
-npx prisma generate
+pnpm prisma generate
 
 # Crear nueva migración
-npx prisma migrate dev --name <nombre>
+pnpm prisma migrate dev --name <nombre>
 
 # Resetear base de datos
-npx prisma migrate reset
+pnpm prisma migrate reset
 ```
 
 ### Flutter

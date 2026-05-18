@@ -55,11 +55,11 @@ FIREBASE_PROJECT_ID="your_project_id"
 
 **Commands (run from `/backend`):**
 ```sh
-npm install                    # Install deps
-npx prisma generate            # Generate Prisma client (required after schema changes)
-npx prisma migrate dev         # Run migrations
-npx prisma studio              # Open DB GUI
-npm run dev                    # Start dev server (ts-node-dev with hot reload)
+pnpm install                    # Install deps
+pnpm prisma generate            # Generate Prisma client (required after schema changes)
+pnpm prisma migrate dev         # Run migrations
+pnpm prisma studio              # Open DB GUI
+pnpm run dev                    # Start dev server (ts-node-dev with hot reload)
 ```
 
 **MQTT topics:**
