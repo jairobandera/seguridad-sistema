@@ -75,4 +75,9 @@ export class DispositivoService {
       ultimaConexion: dispositivo.ultimaConexion,
     };
   }
+
+  // Limpiar credenciales WiFi (factory reset)
+  async limpiarCredencialesWifi(deviceId: string) {
+    return this.repo.limpiarCredencialesWifi(deviceId);
+  }
 }

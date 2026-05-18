@@ -33,6 +33,7 @@ class _WifiPageState extends State<WifiPage> {
   String _estadoColor = 'normal';
   String _deviceWifi = '';
   String _realDeviceId = '';
+  bool _deviceOnline = false;  // Estado local actualizable desde MQTT
 
   final _ble = FlutterReactiveBle();
   DiscoveredDevice? _selectedDevice;
@@ -69,6 +70,9 @@ class _WifiPageState extends State<WifiPage> {
   void initState() {
     super.initState();
     
+    // Inicializar estado local
+    _deviceOnline = widget.dispositivoOnline;
+    
     // Si tenemos deviceId del widget, usarlo inmediatamente
     if (widget.deviceId != null && widget.deviceId!.isNotEmpty) {
       _realDeviceId = widget.deviceId!;
@@ -93,11 +97,21 @@ class _WifiPageState extends State<WifiPage> {
       final status = data['status'] as String?;
       final wifi = data['wifi'] as bool?;
       
+      // 🔥 Actualizar estado online cuando el dispositivo se conecta
+      if (status == 'WIFI_CONNECTED' || status == 'MQTT_CONNECTED') {
+        if (mounted) {
+          setState(() {
+            _deviceOnline = true;
+          });
+        }
+      }
+      
       // 🔥 Limpiar cuando wifi=false o status=ERROR
       if (wifi == false || status == 'ERROR_WIFI' || status == 'WIFI_DISCONNECTED') {
         _clearLastKnownSsid();
         if (mounted) {
           setState(() {
+            _deviceOnline = false;
             _deviceWifi = '';
             _estado = 'Dispositivo NO conectado al WiFi';
             _estadoColor = 'error';
@@ -158,12 +172,15 @@ class _WifiPageState extends State<WifiPage> {
         final online = data['online'] as bool?;
         
         if (mounted) {
-          // 🔥 Si está offline, limpiar SSID persistido
-          if (online == false) {
-            _clearLastKnownSsid();
-          }
-          
           setState(() {
+            // Actualizar estado online desde polling
+            _deviceOnline = online ?? false;
+            
+            // 🔥 Si está offline, limpiar SSID persistido
+            if (online == false) {
+              _clearLastKnownSsid();
+            }
+            
             _deviceWifi = ssid ?? '';
             _estado = ssid != null && ssid.isNotEmpty 
                 ? 'Conectado a $ssid' 
@@ -274,13 +291,18 @@ class _WifiPageState extends State<WifiPage> {
       if (map['result'] == 'ok' && map['ssid'] != null) {
         final ssid = map['ssid'].toString();
         _wifiConnectCompleter?.complete();
+        
         setState(() {
           _deviceWifi = ssid;
           _estado = 'Dispositivo conectado a $ssid';
           _estadoColor = 'ok';
+          _deviceOnline = true;  // Actualizar estado online
         });
+        
+        // Limpiar campos de texto
         _ssidCtrl.clear();
         _passCtrl.clear();
+        
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _showSuccessDialog(ssid);
         });
@@ -529,6 +551,13 @@ class _WifiPageState extends State<WifiPage> {
     await prefs.setString('paired_device_id', device.id);
     await prefs.setString('paired_device_name', device.name ?? '');
   }
+  
+  Future<void> _clearPairedDevice() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('paired_device_id');
+    await prefs.remove('paired_device_name');
+    debugPrint('Dispositivo emparejado eliminado de persistencia');
+  }
 
   Future<void> _loadPairedDevice() async {
     final prefs = await SharedPreferences.getInstance();
@@ -653,21 +682,79 @@ class _WifiPageState extends State<WifiPage> {
 
     setState(() {
       _working = true;
-      _estado = 'Borrando credenciales...';
+      _estado = 'Enviando comando de reset...';
       _estadoColor = 'normal';
     });
 
     try {
+      // Debug: mostrar valores actuales
+      debugPrint('Factory reset - widget.dispositivoOnline: ${widget.dispositivoOnline}');
+      debugPrint('Factory reset - widget.deviceId: ${widget.deviceId}');
+      debugPrint('Factory reset - _realDeviceId: $_realDeviceId');
+      
+      // ✅ PRIORIDAD 1: Si hay deviceId, usar MQTT (llamar al backend)
+      final deviceIdToUse = widget.deviceId ?? _realDeviceId;
+      
+      if (deviceIdToUse != null && deviceIdToUse.isNotEmpty) {
+        debugPrint('Factory reset por MQTT (deviceId: $deviceIdToUse)');
+        
+        try {
+          final response = await ApiClient().post(
+            '/api/dispositivos/$deviceIdToUse/factory-reset',
+          );
+          
+          if (mounted && response is Map && response['ok'] == true) {
+            _clearLastKnownSsid();
+            
+            // 🔥 Limpiar dispositivo emparejado después del reset
+            await _clearPairedDevice();
+            
+            setState(() {
+              _working = false;
+              _estado = 'Comando de reset enviado. El dispositivo se reiniciará...';
+              _estadoColor = 'ok';
+              _deviceWifi = '';
+              _selectedDevice = null;  // Limpiar dispositivo emparejado
+            });
+            
+            // 🔥 Polling agresivo por 30 segundos para esperar que vuelva
+            _startRapidPolling();
+            
+            // ✅ Mostrar mensaje de éxito
+            if (mounted) {
+              showDialog<void>(
+                context: context,
+                builder: (_) => AlertDialog(
+                  title: const Text('Reset enviado'),
+                  content: const Text('La placa borró las credenciales y se reiniciará. Ahora podés enviarle nuevas credenciales por BLE.'),
+                  actions: [TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('OK'))],
+                ),
+              );
+            }
+            return;
+          } else {
+            debugPrint('Factory reset MQTT falló - response: $response');
+          }
+        } catch (mqttError) {
+          debugPrint('Error factory reset por MQTT: $mqttError');
+          // Continuar a BLE si MQTT falla
+        }
+      }
+      
+      // ✅ PRIORIDAD 2: Si no hay deviceId o MQTT falló, usar BLE
+      debugPrint('Factory reset por BLE (fallback)');
+      
       DiscoveredDevice? device = _selectedDevice;
       
-      // 🔥 Intentar BLE PRIMERO (incluso si dispositivo está offline)
       if (device == null) {
         device = await _scanAndSelect();
         if (device == null) {
           setState(() {
+            _working = false;
             _estado = 'No se selecciono dispositivo';
             _estadoColor = 'error';
-            _working = false;
           });
           return;
         }
@@ -687,81 +774,68 @@ class _WifiPageState extends State<WifiPage> {
         await _factoryResetCompleter!.future;
         timeout.cancel();
         
-        // 🔥 FIX 1: Limpiar persistencia y actualizar UI INMEDIATAMENTE
+        // 🔥 Limpiar persistencia y actualizar UI INMEDIATAMENTE
         _clearLastKnownSsid();
+        await _clearPairedDevice();
         
         if (mounted) {
           setState(() {
             _working = false;
             _estado = 'Credenciales borradas. El dispositivo se reiniciará...';
             _estadoColor = 'ok';
-            _deviceWifi = '';  // Limpiar WiFi mostrado
+            _deviceWifi = '';
+            _selectedDevice = null;  // Limpiar dispositivo emparejado
           });
         }
         
-        // 🔥 FIX 4: Polling agresivo por 30 segundos
+        // 🔥 Polling agresivo por 30 segundos
         _startRapidPolling();
         
         await _disconnectBle();
-        return;  // ✅ Éxito por BLE, no intentar MQTT
+        
+        // ✅ Mostrar mensaje de éxito
+        if (mounted) {
+          showDialog<void>(
+            context: context,
+            builder: (_) => AlertDialog(
+              title: const Text('Reset completado'),
+              content: const Text('La placa borró las credenciales y se reiniciará. Ahora podés enviarle nuevas credenciales por BLE.'),
+              actions: [TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'))],
+            ),
+          );
+        }
+        return;
       }
       
-      // Si BLE falló y dispositivo está online, intentar por MQTT
-      if (widget.dispositivoOnline && widget.deviceId != null) {
-        try {
-          final response = await ApiClient().post(
-            '/api/dispositivos/${widget.deviceId}/factory-reset',
-          );
-          
-          if (mounted && response is Map && response['ok'] == true) {
-            _clearLastKnownSsid();
-            
-            // 🔥 FIX 1: Actualizar UI inmediatamente
-            setState(() {
-              _working = false;
-              _estado = 'Comando de reset enviado. El dispositivo se reiniciará...';
-              _estadoColor = 'ok';
-              _deviceWifi = '';
-            });
-            
-            // 🔥 FIX 4: Polling agresivo
-            _startRapidPolling();
-          }
-        } catch (mqttError) {
-          debugPrint('Error factory reset por MQTT: $mqttError');
-          if (mounted) {
-            setState(() {
-              _working = false;
-              _estado = 'Error: No se pudo conectar por BLE ni MQTT';
-              _estadoColor = 'error';
-            });
-          }
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _working = false;
-            _estado = 'Error: No se pudo conectar al dispositivo';
-            _estadoColor = 'error';
-          });
-        }
+      // ❌ Si llegamos acá, fallaron ambos métodos
+      if (mounted) {
+        setState(() {
+          _working = false;
+          _estado = 'Error: No se pudo conectar al dispositivo';
+          _estadoColor = 'error';
+        });
+        _showErrorDialog('No se pudo conectar por BLE ni MQTT. Verificá que la placa esté encendida.');
       }
     } catch (e) {
       if (mounted) {
         setState(() {
+          _working = false;
           _estado = 'Error: $e';
           _estadoColor = 'error';
-          _working = false;
         });
+        _showErrorDialog('Error en factory reset: $e');
       }
     } finally {
       if (mounted) {
         setState(() { _working = false; });
-        await _disconnectBle();
       }
     }
   }
 
+  // =====================================================
+  // DIALOGOS
   // =====================================================
   // DIALOGOS
   // =====================================================
@@ -845,23 +919,22 @@ class _WifiPageState extends State<WifiPage> {
                 const SizedBox(height: 10),
                 Row(children: [
                   Icon(
-                    widget.dispositivoOnline ? Icons.check_circle : Icons.cancel,
-                    color: widget.dispositivoOnline ? Colors.greenAccent : Colors.redAccent,
+                    _deviceOnline ? Icons.check_circle : Icons.cancel,
+                    color: _deviceOnline ? Colors.greenAccent : Colors.redAccent,
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    widget.dispositivoOnline ? 'Online (MQTT)' : 'Offline',
+                    _deviceOnline ? 'Online (MQTT)' : 'Offline',
                     style: const TextStyle(color: Colors.white),
                   ),
                 ]),
                 const SizedBox(height: 10),
-                if (widget.deviceId != null)
-                  ElevatedButton.icon(
-                    onPressed: _working ? null : _factoryReset,
-                    icon: const Icon(Icons.settings_backup_restore),
-                    label: const Text('Resetear de fabrica'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent),
-                  ),
+                ElevatedButton.icon(
+                  onPressed: _working ? null : _factoryReset,
+                  icon: const Icon(Icons.settings_backup_restore),
+                  label: const Text('Resetear de fabrica'),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent),
+                ),
               ],
             )),
 

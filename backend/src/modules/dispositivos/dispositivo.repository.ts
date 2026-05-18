@@ -75,4 +75,15 @@ export class DispositivoRepository {
   existeDeviceId(deviceId: string) {
     return prisma.dispositivo.findUnique({ where: { deviceId } });
   }
+
+  // Limpiar credenciales WiFi (factory reset)
+  limpiarCredencialesWifi(deviceId: string) {
+    return prisma.dispositivo.update({
+      where: { deviceId },
+      data: { 
+        wifiSsid: null,
+        wifiRssi: null,
+      },
+    });
+  }
 }

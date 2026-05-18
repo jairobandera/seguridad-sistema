@@ -8,7 +8,7 @@ import { getIO } from "../socket/socket";
 import { buildEventDTO } from "../factories/event.factory";
 
 //const mqttUrl = process.env.MQTT_URL || "mqtt://192.168.1.50:1883";
-const mqttUrl = process.env.MQTT_URL || "mqtt://192.168.1.34:1883";
+const mqttUrl = process.env.MQTT_URL || "mqtt://192.168.1.64:1883";
 
 // =======================================================
 // Diagnóstico MQTT (exportado para endpoint)
@@ -233,7 +233,7 @@ client.on("message", async (topic, payload) => {
       await prisma.dispositivo.update({
         where: { deviceId },
         data: {
-          online: status === "MQTT_CONNECTED" || status === "WIFI_CONNECTED",
+          online: true,
           ultimaConexion: new Date(),
           wifiSsid: ssid,
           wifiRssi: rssi,

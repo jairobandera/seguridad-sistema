@@ -6,7 +6,7 @@
 // =======================
 // CONFIG MQTT
 // =======================
-const char* MQTT_HOST = "192.168.1.34";
+const char* MQTT_HOST = "192.168.1.17";
 const uint16_t MQTT_PORT = 1883;
 
 // =======================
@@ -224,7 +224,13 @@ void handleBleCommand(String data) {
       WiFi.disconnect(true);
       delay(500);
     }
-
+    
+    // CRITICO: Forzar disconnect aunque este en estado WL_CONNECT_STARTED
+    // Esto evita el error "sta is connecting, cannot set config"
+    Serial.println("WiFi.disconnect(true) - forzando disconnect...");
+    WiFi.disconnect(true);
+    delay(1000);  // Dar tiempo a que el estado WiFi se resetee completamente
+    
     // Recién ahora intentar WiFi
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid.c_str(), pass.c_str());
@@ -316,6 +322,7 @@ void iniciarBLE() {
 
   NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(NUS_SERVICE_UUID);
+  pAdvertising->setName(deviceName.c_str());
   pAdvertising->start();
 
   Serial.print("BLE iniciado: ");
@@ -372,6 +379,11 @@ void conectarWifiGuardada() {
     WiFi.disconnect(true);
     delay(300);
   }
+  
+  // CRITICO: Forzar disconnect aunque este en estado WL_CONNECT_STARTED
+  Serial.println("WiFi.disconnect(true) - forzando disconnect...");
+  WiFi.disconnect(true);
+  delay(1000);  // Dar tiempo a que el estado WiFi se resetee completamente
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid.c_str(), pass.c_str());

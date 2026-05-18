@@ -157,7 +157,64 @@ TWILIO_PHONE_NUMBER="+1234567890"
 FIREBASE_PROJECT_ID="tu_project_id"
 ```
 
-### 4️⃣ Generar cliente Prisma
+### 4️ Configurar Firebase Admin SDK (notificaciones push)
+
+**Paso 1: Crear proyecto en Firebase Console**
+
+1. Ir a https://console.firebase.google.com/
+2. Click en "Agregar proyecto" o seleccionar uno existente
+3. Anotar el `Project ID` para el `.env`
+
+**Paso 2: Generar clave de servicio (service account)**
+
+1. En Firebase Console, ir a `Configuración del proyecto` (engranaje)
+2. Pestaña `Cuentas de servicio`
+3. Click en `Generar nueva clave privada`
+4. Se descargará un archivo JSON (ej: `service-account.json`)
+
+**Paso 3: Colocar el archivo en el backend**
+
+```sh
+# Crear directorio firebase en backend
+mkdir backend/firebase
+
+# Mover el archivo descargado
+mv ~/Downloads/service-account.json backend/firebase/
+```
+
+**Estructura resultante:**
+```
+backend/
+├── firebase/
+│   └── service-account.json   (NO subir a git - está en .gitignore)
+├── src/
+├── prisma/
+└── package.json
+```
+
+**Nota:** El archivo `service-account.json` contiene credenciales sensibles y está excluido del repositorio en `.gitignore`. Cada desarrollador debe colocar su propio archivo.
+
+### 5️⃣ Configurar Firebase en Flutter (cliente)
+
+**Para Android:**
+
+1. En Firebase Console, ir a `Configuración del proyecto`
+2. En `Tus apps`, agregar app Android con package: `com.example.seguridad_app`
+3. Descargar `google-services.json`
+4. Colocar en `frontend/seguridad_app/android/app/google-services.json`
+
+**Para iOS:**
+
+1. Agregar app iOS en Firebase Console
+2. Descargar `GoogleService-Info.plist`
+3. Colocar en `frontend/seguridad_app/ios/Runner/GoogleService-Info.plist`
+
+**Para Web:**
+
+1. Agregar app Web en Firebase Console
+2. Copiar configuración en `frontend/seguridad_app/web/index.html`
+
+### 6️⃣ Generar cliente Prisma
 
 ```sh
 npx prisma generate

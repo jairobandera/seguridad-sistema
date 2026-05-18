@@ -57,6 +57,8 @@ export class DispositivoController {
   factoryReset = async (req: Request, res: Response) => {
     try {
       const param = req.params.id;
+      logger.info(`🔄 Factory reset solicitado para: ${param}`);
+      
       // intentar como id numérico primero, si no, como deviceId
       let dispositivo: any = null;
       const id = Number(param);
@@ -66,15 +68,25 @@ export class DispositivoController {
       if (!dispositivo) {
         dispositivo = await this.service.obtenerPorDeviceId(param);
       }
-      if (!dispositivo) return res.status(404).json({ ok: false, error: 'Dispositivo no encontrado' });
+      if (!dispositivo) {
+        logger.error(` Dispositivo no encontrado: ${param}`);
+        return res.status(404).json({ ok: false, error: 'Dispositivo no encontrado' });
+      }
 
+      logger.info(`📡 Enviando factory_reset por MQTT a: ${dispositivo.deviceId}`);
+      
       // publicar comando MQTT
       const { publishFactoryReset } = await import('./dispositivo.mqtt');
       await publishFactoryReset(dispositivo.deviceId);
 
+      // 🔥 Limpiar credenciales WiFi en la BD inmediatamente
+      logger.info(`🧹 Limpiando credenciales WiFi en BD para: ${dispositivo.deviceId}`);
+      await this.service.limpiarCredencialesWifi(dispositivo.deviceId);
+
+      logger.info(`✅ Factory reset completado para: ${dispositivo.deviceId}`);
       return res.json({ ok: true, message: 'Comando enviado' });
     } catch (err: any) {
-      logger.error(String(err));
+      logger.error(`❌ Error en factory reset: ${err.message}`);
       return res.status(500).json({ ok: false, error: err.message });
     }
   };
