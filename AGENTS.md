@@ -32,9 +32,13 @@ Multi-platform residential security system with ESP32 hardware, Node.js/TypeScri
 ```
 DATABASE_URL="postgresql://USER:PASS@localhost:5432/seguridad"
 JWT_SECRET="<secret>"
-MQTT_URL="mqtt://localhost:1883"
 PORT=3000
 LOG_LEVEL=info
+
+# Network configuration
+MQTT_BROKER_HOST="localhost"
+MQTT_BROKER_PORT=1883
+API_BASE_URL="http://localhost:3000"
 
 # Firebase (optional - for push notifications)
 FIREBASE_PROJECT_ID="your_project_id"
@@ -44,6 +48,10 @@ FIREBASE_PROJECT_ID="your_project_id"
 1. Create service account key in Firebase Console
 2. Save as `backend/firebase/service-account.json` (excluded from git)
 3. For Flutter: add `google-services.json` to `frontend/seguridad_app/android/app/`
+
+**Environment Template:**
+- Copy `.env.example` to `.env` and fill in your values
+- `.env` is excluded from git - each developer has their own configuration
 
 **Commands (run from `/backend`):**
 ```sh
