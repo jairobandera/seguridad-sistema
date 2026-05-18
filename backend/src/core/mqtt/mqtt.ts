@@ -8,7 +8,8 @@ import { getIO } from "../socket/socket";
 import { buildEventDTO } from "../factories/event.factory";
 
 //const mqttUrl = process.env.MQTT_URL || "mqtt://192.168.1.50:1883";
-const mqttUrl = process.env.MQTT_URL || "mqtt://192.168.1.64:1883";
+const mqttUrl = process.env.MQTT_URL || 
+  `mqtt://${process.env.MQTT_BROKER_HOST || 'localhost'}:${process.env.MQTT_BROKER_PORT || '1883'}`;
 
 // =======================================================
 // Diagnóstico MQTT (exportado para endpoint)
