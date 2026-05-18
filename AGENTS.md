@@ -9,8 +9,9 @@ Multi-platform residential security system with ESP32 hardware, Node.js/TypeScri
 /seguridad-sistema/
 ├── backend/           # Node.js + Express + TypeScript + Prisma + MQTT + Socket.IO
 ├── frontend/          # Flutter (Android, iOS, Web, Desktop)
-├── seguridad_esp32/   # ESP32 firmware (Arduino, BLE + MQTT)
-└── .agents/skills/    # OpenCode skills config
+├── esp32/             # ESP32 firmware (Arduino, BLE + MQTT)
+│   └── seguridad_esp32/
+── .agents/skills/    # OpenCode skills config
 ```
 
 ## Backend (`/backend`)
@@ -34,7 +35,15 @@ JWT_SECRET="<secret>"
 MQTT_URL="mqtt://localhost:1883"
 PORT=3000
 LOG_LEVEL=info
+
+# Firebase (optional - for push notifications)
+FIREBASE_PROJECT_ID="your_project_id"
 ```
+
+**Firebase Setup:**
+1. Create service account key in Firebase Console
+2. Save as `backend/firebase/service-account.json` (excluded from git)
+3. For Flutter: add `google-services.json` to `frontend/seguridad_app/android/app/`
 
 **Commands (run from `/backend`):**
 ```sh
@@ -78,11 +87,11 @@ flutter build apk            # Build Android APK
 
 **User roles:** Admin, Cliente (homeowner), Guardia (security guard)
 
-## ESP32 Firmware (`/seguridad_esp32`)
+## ESP32 Firmware (`/esp32/seguridad_esp32`)
 
 **Stack:** Arduino framework, ESP32, PubSubClient (MQTT), NimBLE (BLE server)
 
-**Entry point:** `seguridad_esp32.ino`
+**Entry point:** `seguridad_esp32/seguridad_esp32.ino`
 
 **Features:**
 - BLE UART service for WiFi provisioning (Nordic UART UUIDs)
@@ -96,14 +105,14 @@ flutter build apk            # Build Android APK
 - `{"cmd":"wifi","ssid":"...","pass":"..."}` - Configure WiFi
 - `{"cmd":"clear_wifi"}` - Reset WiFi credentials
 
-**MQTT hardcoded:** Host `192.168.1.34`, Port `1883` (update in `.ino` for different network)
+**MQTT hardcoded:** Host `192.168.1.64`, Port `1883` (update in `.ino` for different network)
+
+**Important fix:** Before calling `WiFi.begin()`, always call `WiFi.disconnect(true)` with 1000ms delay to avoid "sta is connecting, cannot set config" error when retrying connections.
 
 ## Skills Loaded
 - `esp32-firmware-engineer` - ESP-IDF/Arduino embedded development
 - `mqtt-development` - MQTT messaging patterns
 - `nodejs-backend-patterns` - Express/TypeScript backend
-- `websocket-engineer` - Socket.IO real-time communication
-- `core-bluetooth` - BLE central/peripheral operations
 
 ## Development Gotchas
 
@@ -112,11 +121,13 @@ flutter build apk            # Build Android APK
 3. **ESP32 uses hardcoded MQTT IP** - update `MQTT_HOST` in `.ino` to match your network
 4. **Firebase service account** excluded from git - place at `backend/firebase/service-account.json`
 5. **Server binds to `0.0.0.0`** for external access (Android emulator, physical devices)
+6. **ESP32 WiFi reconnect fix** - Always call `WiFi.disconnect(true)` with 1000ms delay before `WiFi.begin()` to avoid connection state errors
+7. **Device online status** - Backend now keeps `online=true` even with `ERROR_WIFI` (device is reachable via MQTT regardless of WiFi status)
 
 ## Ignored Files
 - `.env*` files (all environments)
 - `backend/node_modules/`, `dist/`
+- `backend/firebase/service-account.json` (Firebase credentials)
 - `frontend/**/build/`, `.dart_tool/`
-- `seguridad_esp32/build/`
+- `esp32/build/`
 - `info/` (personal files)
-- Firebase credentials
