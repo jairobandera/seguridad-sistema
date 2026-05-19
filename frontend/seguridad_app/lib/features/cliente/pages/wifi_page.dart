@@ -894,6 +894,24 @@ class _WifiPageState extends State<WifiPage> {
     );
   }
 
+  Widget _infoItem(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.yellow, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -924,7 +942,7 @@ class _WifiPageState extends State<WifiPage> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    _deviceOnline ? 'Online (MQTT)' : 'Offline',
+                    _deviceOnline ? 'En línea' : 'Sin conexión',
                     style: const TextStyle(color: Colors.white),
                   ),
                 ]),
@@ -940,9 +958,37 @@ class _WifiPageState extends State<WifiPage> {
 
             const SizedBox(height: 20),
 
-            const Text(
-              'Usa redes 2.4 GHz (NO 5G). Acerca el celular a la placa.',
-              style: TextStyle(color: Colors.yellowAccent, fontSize: 13),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.yellow.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.yellow.withOpacity(0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.info_outline, color: Colors.yellow, size: 20),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Información importante',
+                        style: TextStyle(
+                          color: Colors.yellow,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _infoItem(Icons.wifi, 'Usá redes 2.4 GHz (NO 5G)'),
+                  _infoItem(Icons.bluetooth, 'Activá el Bluetooth del celular'),
+                  _infoItem(Icons.location_on, 'Activá la ubicación/GPS'),
+                  _infoItem(Icons.near_me, 'Acerca el celular a la placa'),
+                ],
+              ),
             ),
             const SizedBox(height: 12),
 
@@ -972,7 +1018,7 @@ class _WifiPageState extends State<WifiPage> {
                     ? 'Emparejar con placa'
                     : 'Emparejado: ${_selectedDevice!.name}'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.purpleAccent,
+                  backgroundColor: Colors.cyan,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
               ),
